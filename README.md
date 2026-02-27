@@ -16,6 +16,7 @@ git clone https://github.com/itsumonotakumi/octoparse-mcp.git
 cd octoparse-mcp
 npm install
 npm run build
+npm test          # テスト実行
 ```
 
 ## 利用可能なツール
