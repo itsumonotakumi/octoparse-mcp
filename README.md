@@ -12,6 +12,7 @@ stdio トランスポートで動作するため、ポート開放不要。
 ## セットアップ
 
 ```bash
+git clone https://github.com/itsumonotakumi/octoparse-mcp.git
 cd octoparse-mcp
 npm install
 npm run build
@@ -33,10 +34,18 @@ npm run build
 Claude Code で使う場合:
 
 ```bash
-claude mcp add octoparse -- node /path/to/octoparse-mcp/dist/index.js
+claude mcp add octoparse \
+  -e OCTOPARSE_USERNAME=your-username \
+  -e OCTOPARSE_PASSWORD=your-password \
+  -- node /path/to/octoparse-mcp/dist/index.js
 ```
 
-環境変数は `.env` ファイルまたはシェルで事前に設定してください。
+または、プロジェクトルートに `.env` ファイルを作成して環境変数を設定:
+
+```
+OCTOPARSE_USERNAME=your-username
+OCTOPARSE_PASSWORD=your-password
+```
 
 ## 環境変数
 

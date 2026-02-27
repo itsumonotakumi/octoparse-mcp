@@ -1,18 +1,20 @@
 export interface TokenResponse {
   access_token: string;
   token_type: string;
-  expires_in: number;
+  expires_in: string | number;
   refresh_token: string;
 }
 
-export interface ApiResponse<T> {
+// Legacy API wraps responses in {data, error, error_Description}.
+// New API may return data directly.
+export interface WrappedResponse<T> {
   data: T;
   error: string;
   error_Description: string;
 }
 
 export interface TaskGroup {
-  taskGroupId: string;
+  taskGroupId: number;
   taskGroupName: string;
 }
 

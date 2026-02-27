@@ -1,6 +1,6 @@
 import type {
   TokenResponse,
-  ApiResponse,
+  WrappedResponse,
   TaskGroup,
   Task,
   DataResult,
@@ -8,6 +8,30 @@ import type {
 
 const BASE_URL = "https://openapi.octoparse.com";
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
+/**
+ * Unwrap API response: handles both new (direct) and legacy (wrapped) formats.
+ * Legacy format: { data: T, error: "success", error_Description: "" }
+ * New format: T directly
+ *
+ * Detection: legacy wrapper has "error" as a string (not in data payloads).
+ */
+export function unwrap<T>(raw: unknown): T {
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "data" in raw &&
+    "error" in raw &&
+    typeof (raw as Record<string, unknown>).error === "string"
+  ) {
+    const wrapped = raw as WrappedResponse<T>;
+    if (wrapped.error !== "success") {
+      throw new Error(`API error: ${wrapped.error_Description || wrapped.error}`);
+    }
+    return wrapped.data;
+  }
+  return raw as T;
+}
 
 export class OctoparseClient {
   private username: string;
@@ -57,7 +81,6 @@ export class OctoparseClient {
     });
 
     if (!res.ok) {
-      // Refresh failed, fall back to full auth
       return this.authenticate();
     }
 
@@ -68,7 +91,12 @@ export class OctoparseClient {
   private setToken(token: TokenResponse): void {
     this.accessToken = token.access_token;
     this.refreshToken = token.refresh_token;
-    this.tokenExpiresAt = Date.now() + token.expires_in * 1000;
+    // expires_in may be string or number per Swagger spec
+    const parsed = typeof token.expires_in === "string"
+      ? parseInt(token.expires_in, 10)
+      : token.expires_in;
+    const expiresIn = Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
+    this.tokenExpiresAt = Date.now() + expiresIn * 1000;
   }
 
   private async ensureToken(): Promise<string> {
@@ -87,37 +115,59 @@ export class OctoparseClient {
 
   // --- HTTP ---
 
-  private async request<T>(
-    method: string,
+  private async get<T>(
     path: string,
-    params?: Record<string, string | number>,
-    retry = true
+    query?: Record<string, string | number>,
+    retry = true,
   ): Promise<T> {
     const token = await this.ensureToken();
 
     let url = `${BASE_URL}${path}`;
-    if (params && (method === "GET" || method === "DELETE")) {
+    if (query) {
       const qs = new URLSearchParams();
-      for (const [k, v] of Object.entries(params)) {
+      for (const [k, v] of Object.entries(query)) {
         qs.set(k, String(v));
       }
       url += `?${qs.toString()}`;
     }
 
     const res = await fetch(url, {
-      method,
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return this.handleResponse<T>(res, () => this.get<T>(path, query, false), retry);
+  }
+
+  private async post<T>(
+    path: string,
+    body?: Record<string, unknown>,
+    retry = true,
+  ): Promise<T> {
+    const token = await this.ensureToken();
+    const url = `${BASE_URL}${path}`;
+
+    const res = await fetch(url, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body:
-        method !== "GET" && params ? JSON.stringify(params) : undefined,
+      body: body ? JSON.stringify(body) : undefined,
     });
 
+    return this.handleResponse<T>(res, () => this.post<T>(path, body, false), retry);
+  }
+
+  private async handleResponse<T>(
+    res: Response,
+    retryFn: () => Promise<T>,
+    retry: boolean,
+  ): Promise<T> {
     if (res.status === 401 && retry) {
       this.accessToken = null;
       await this.authenticate();
-      return this.request<T>(method, path, params, false);
+      return retryFn();
     }
 
     if (res.status === 403) {
@@ -133,63 +183,44 @@ export class OctoparseClient {
     }
 
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`API error ${res.status}: ${body}`);
+      const text = await res.text();
+      throw new Error(`API error ${res.status}: ${text}`);
     }
 
-    return res.json() as Promise<T>;
+    const json: unknown = await res.json();
+    return unwrap<T>(json);
   }
 
-  // --- Public API Methods ---
+  // --- Public API Methods (New OpenAPI endpoints) ---
 
-  async listTaskGroups(): Promise<ApiResponse<TaskGroup[]>> {
-    return this.request<ApiResponse<TaskGroup[]>>("GET", "/taskGroup");
+  async listTaskGroups(): Promise<TaskGroup[]> {
+    return this.get<TaskGroup[]>("/TaskGroup");
   }
 
-  async listTasks(taskGroupId: string): Promise<ApiResponse<Task[]>> {
-    return this.request<ApiResponse<Task[]>>("GET", "/task", {
-      taskGroupId,
-    });
+  async listTasks(taskGroupId: number): Promise<Task[]> {
+    return this.get<Task[]>("/Task/Search", { taskGroupId });
   }
 
   async getTaskData(
     taskId: string,
     offset: number = 0,
-    size: number = 100
-  ): Promise<ApiResponse<DataResult>> {
-    return this.request<ApiResponse<DataResult>>(
-      "GET",
-      "/alldata/getDataOfTaskByOffset",
-      { taskId, offset, size }
-    );
+    size: number = 100,
+  ): Promise<DataResult> {
+    return this.get<DataResult>("/data/all", { taskId, offset, size });
   }
 
   async getNotExportedData(
     taskId: string,
-    size: number = 100
-  ): Promise<ApiResponse<DataResult>> {
-    return this.request<ApiResponse<DataResult>>(
-      "GET",
-      "/data/notexported",
-      { taskId, size }
-    );
+    size: number = 100,
+  ): Promise<DataResult> {
+    return this.get<DataResult>("/data/notexported", { taskId, size });
   }
 
-  async markDataAsExported(
-    taskId: string
-  ): Promise<ApiResponse<null>> {
-    return this.request<ApiResponse<null>>(
-      "POST",
-      "/data/notexported/update",
-      { taskId }
-    );
+  async markDataAsExported(taskId: string): Promise<unknown> {
+    return this.post<unknown>("/data/markexported", { taskId });
   }
 
-  async clearTaskData(taskId: string): Promise<ApiResponse<null>> {
-    return this.request<ApiResponse<null>>(
-      "POST",
-      "/task/removeDataByTaskId",
-      { taskId }
-    );
+  async clearTaskData(taskId: string): Promise<unknown> {
+    return this.post<unknown>("/data/remove", { taskId });
   }
 }

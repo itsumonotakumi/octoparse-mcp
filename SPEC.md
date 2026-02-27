@@ -68,48 +68,40 @@ Authorization: Bearer <access_token>
 ### 1. タスクグループ一覧取得
 
 ```
-GET /taskGroup
+GET /TaskGroup
 Authorization: Bearer <access_token>
 ```
 
 **レスポンス:**
 ```json
-{
-  "data": [
-    {
-      "taskGroupId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-      "taskGroupName": "グループ名"
-    }
-  ],
-  "error": "success",
-  "error_Description": ""
-}
+[
+  {
+    "taskGroupId": 12345,
+    "taskGroupName": "グループ名"
+  }
+]
 ```
 
 ### 2. タスク一覧取得
 
 ```
-GET /task?taskGroupId={taskGroupId}
+GET /Task/Search?taskGroupId={taskGroupId}
 Authorization: Bearer <access_token>
 ```
 
 **パラメータ:**
 | パラメータ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| taskGroupId | string (UUID) | Yes | タスクグループ ID |
+| taskGroupId | integer (int32) | Yes | タスクグループ ID |
 
 **レスポンス:**
 ```json
-{
-  "data": [
-    {
-      "taskId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-      "taskName": "タスク名"
-    }
-  ],
-  "error": "success",
-  "error_Description": ""
-}
+[
+  {
+    "taskId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "taskName": "タスク名"
+  }
+]
 ```
 
 ### 3. 未エクスポートデータ取得
@@ -124,21 +116,17 @@ Authorization: Bearer <access_token>
 **パラメータ:**
 | パラメータ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| taskId | string (UUID) | Yes | タスク ID |
-| size | integer | Yes | 取得行数（1〜1000） |
+| taskId | string | Yes | タスク ID |
+| size | integer (int32) | Yes | 取得行数（1〜1000） |
 
 **レスポンス:**
 ```json
 {
-  "data": {
-    "total": 500,
-    "offset": "...",
-    "dataList": [
-      { "フィールド名1": "値1", "フィールド名2": "値2" }
-    ]
-  },
-  "error": "success",
-  "error_Description": ""
+  "total": 500,
+  "offset": "...",
+  "dataList": [
+    { "フィールド名1": "値1", "フィールド名2": "値2" }
+  ]
 }
 ```
 
@@ -147,22 +135,11 @@ Authorization: Bearer <access_token>
 未エクスポートデータのステータスを「exported」に更新する。
 
 ```
-POST /data/notexported/update?taskId={taskId}
+POST /data/markexported
 Authorization: Bearer <access_token>
-```
+Content-Type: application/json
 
-**パラメータ:**
-| パラメータ | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| taskId | string (UUID) | Yes | タスク ID |
-
-**レスポンス:**
-```json
-{
-  "data": null,
-  "error": "success",
-  "error_Description": ""
-}
+{ "taskId": "<タスク ID>" }
 ```
 
 ### 5. 全データ取得（オフセット指定）
@@ -170,30 +147,26 @@ Authorization: Bearer <access_token>
 データのエクスポートステータスに影響を与えずにデータを取得する。ページネーション対応。
 
 ```
-GET /alldata/getDataOfTaskByOffset?taskId={taskId}&offset={offset}&size={size}
+GET /data/all?taskId={taskId}&offset={offset}&size={size}
 Authorization: Bearer <access_token>
 ```
 
 **パラメータ:**
 | パラメータ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| taskId | string (UUID) | Yes | タスク ID |
-| offset | integer | Yes | 開始位置（初回は 0） |
-| size | integer | Yes | 取得行数（1〜1000） |
+| taskId | string | Yes | タスク ID |
+| offset | integer (int64) | Yes | 開始位置（初回は 0） |
+| size | integer (int32) | Yes | 取得行数（1〜1000） |
 
 **レスポンス:**
 ```json
 {
-  "data": {
-    "total": 5000,
-    "offset": 1000,
-    "dataList": [
-      { "フィールド名1": "値1", "フィールド名2": "値2" }
-    ],
-    "restTotal": 4000
-  },
-  "error": "success",
-  "error_Description": ""
+  "total": 5000,
+  "offset": 1000,
+  "dataList": [
+    { "フィールド名1": "値1", "フィールド名2": "値2" }
+  ],
+  "restTotal": 4000
 }
 ```
 
@@ -204,22 +177,11 @@ Authorization: Bearer <access_token>
 指定タスクの全データを削除する。
 
 ```
-POST /task/removeDataByTaskId?taskId={taskId}
+POST /data/remove
 Authorization: Bearer <access_token>
-```
+Content-Type: application/json
 
-**パラメータ:**
-| パラメータ | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| taskId | string (UUID) | Yes | タスク ID |
-
-**レスポンス:**
-```json
-{
-  "data": null,
-  "error": "success",
-  "error_Description": ""
-}
+{ "taskId": "<タスク ID>" }
 ```
 
 ## スタンダードプランでは利用不可（プロフェッショナル以上）
@@ -273,7 +235,7 @@ Authorization: Bearer <access_token>
 **入力パラメータ:**
 | パラメータ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| taskGroupId | string | Yes | タスクグループ ID |
+| taskGroupId | number (int32) | Yes | タスクグループ ID |
 
 **出力:** タスク ID と名前の一覧
 
@@ -370,21 +332,13 @@ octoparse-mcp/
 └── README.md
 ```
 
-### Claude Desktop 設定例
+### Claude Code 設定例
 
-```json
-{
-  "mcpServers": {
-    "octoparse": {
-      "command": "node",
-      "args": ["/path/to/octoparse-mcp/dist/index.js"],
-      "env": {
-        "OCTOPARSE_USERNAME": "your-username",
-        "OCTOPARSE_PASSWORD": "your-password"
-      }
-    }
-  }
-}
+```bash
+claude mcp add octoparse \
+  -e OCTOPARSE_USERNAME=your-username \
+  -e OCTOPARSE_PASSWORD=your-password \
+  -- node /path/to/octoparse-mcp/dist/index.js
 ```
 
 ## 参考情報

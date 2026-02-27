@@ -2,6 +2,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { OctoparseClient } from "./octoparse-client.js";
 
+function errorResult(message: string) {
+  return { content: [{ type: "text" as const, text: message }], isError: true };
+}
+
 export function registerTools(server: McpServer, client: OctoparseClient): void {
   // 1. list_task_groups
   server.tool(
@@ -9,18 +13,14 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
     "タスクグループの一覧を取得します",
     {},
     async () => {
-      const res = await client.listTaskGroups();
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        const data = await client.listTaskGroups();
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(res.data, null, 2),
-          },
-        ],
-      };
     }
   );
 
@@ -29,21 +29,17 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
     "list_tasks",
     "指定したタスクグループ内のタスク一覧を取得します",
     {
-      taskGroupId: z.string().describe("タスクグループ ID"),
+      taskGroupId: z.number().int().describe("タスクグループ ID（数値）"),
     },
     async ({ taskGroupId }) => {
-      const res = await client.listTasks(taskGroupId);
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        const data = await client.listTasks(taskGroupId);
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(res.data, null, 2),
-          },
-        ],
-      };
     }
   );
 
@@ -63,17 +59,18 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
         .describe("取得行数（1〜1000、デフォルト: 100）"),
     },
     async ({ taskId, offset, size }) => {
-      const res = await client.getTaskData(taskId, offset, size);
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        const data = await client.getTaskData(taskId, offset, size);
+        const summary = `合計: ${data.total} 件 | 取得: ${data.dataList.length} 件 | 次のオフセット: ${data.offset} | 残り: ${data.restTotal ?? "不明"}`;
+        return {
+          content: [
+            { type: "text", text: summary },
+            { type: "text", text: JSON.stringify(data.dataList, null, 2) },
+          ],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      const summary = `合計: ${res.data.total} 件 | 取得: ${res.data.dataList.length} 件 | 次のオフセット: ${res.data.offset} | 残り: ${res.data.restTotal ?? "不明"}`;
-      return {
-        content: [
-          { type: "text", text: summary },
-          { type: "text", text: JSON.stringify(res.data.dataList, null, 2) },
-        ],
-      };
     }
   );
 
@@ -92,17 +89,18 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
         .describe("取得行数（1〜1000、デフォルト: 100）"),
     },
     async ({ taskId, size }) => {
-      const res = await client.getNotExportedData(taskId, size);
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        const data = await client.getNotExportedData(taskId, size);
+        const summary = `合計: ${data.total} 件 | 取得: ${data.dataList.length} 件`;
+        return {
+          content: [
+            { type: "text", text: summary },
+            { type: "text", text: JSON.stringify(data.dataList, null, 2) },
+          ],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      const summary = `合計: ${res.data.total} 件 | 取得: ${res.data.dataList.length} 件`;
-      return {
-        content: [
-          { type: "text", text: summary },
-          { type: "text", text: JSON.stringify(res.data.dataList, null, 2) },
-        ],
-      };
     }
   );
 
@@ -114,13 +112,14 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
       taskId: z.string().describe("タスク ID"),
     },
     async ({ taskId }) => {
-      const res = await client.markDataAsExported(taskId);
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        await client.markDataAsExported(taskId);
+        return {
+          content: [{ type: "text", text: "データステータスを exported に更新しました。" }],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      return {
-        content: [{ type: "text", text: "データステータスを exported に更新しました。" }],
-      };
     }
   );
 
@@ -132,13 +131,14 @@ export function registerTools(server: McpServer, client: OctoparseClient): void 
       taskId: z.string().describe("タスク ID"),
     },
     async ({ taskId }) => {
-      const res = await client.clearTaskData(taskId);
-      if (res.error !== "success") {
-        return { content: [{ type: "text", text: `エラー: ${res.error_Description}` }] };
+      try {
+        await client.clearTaskData(taskId);
+        return {
+          content: [{ type: "text", text: "タスクデータを削除しました。" }],
+        };
+      } catch (e) {
+        return errorResult(e instanceof Error ? e.message : String(e));
       }
-      return {
-        content: [{ type: "text", text: "タスクデータを削除しました。" }],
-      };
     }
   );
 }
